@@ -8,6 +8,17 @@ func arena() -> RaceState {
     return s
 }
 func give(_ s: inout RaceState,_ k: Knack,to id: Int = 0,hand: Int = 0) { s.inventories[id].hands[hand]=k.rawValue }
+func trapRun(tier: Int,seed: UInt64,_ k: Knack) -> (hit: Bool,state: RaceState) {
+    let c=flat()
+    var s=makeRace(RaceConfig(seed:seed,runners:(0..<6).map { RunnerSetup(botTier:$0 == 1 ? tier : nil,cast:$0) }),course:c)
+    for i in 0..<6 { s.runners[i]=running((200+i*3)*ONE) }
+    s.runners[1]=running(20*ONE); s.runners[0].x=40*ONE; give(&s,k)
+    useKnack(&s,runner:0,hand:0,course:c)
+    s.runners[0].x=200*ONE
+    var hit=false
+    while s.runners[1].x < 42*ONE { step(&s,inputs:[],course:c); hit=hit || s.runners[1].shakeT > 0 }
+    return (hit,s)
+}
 final class KnackTests: XCTestCase {
     func testPaperDartSpeedRangeGeometryAndStagger() {
         let c=flat(); var s=arena(); give(&s,.paperDart)
@@ -30,6 +41,29 @@ final class KnackTests: XCTestCase {
         step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[5].taxMul,58982)
         s.runners[0].x=50*ONE; step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[0].taxMul,ONE); XCTAssertEqual(s.runners[5].taxMul,ONE)
         s.taxT=1; step(&s,inputs:[],course:c); XCTAssertEqual(s.taxT,0)
+    }
+    func testOverdueBillSkipsFinishedRunnersAndMovesOnWhenLeaderFinishes() {
+        let c=flat(); var s=arena(); give(&s,.overdueBill)
+        useKnack(&s,runner:0,hand:0,course:c)
+        step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[5].taxMul,58982)
+        s.runners[5].finished=s.tick; step(&s,inputs:[],course:c)
+        XCTAssertEqual(s.runners[5].taxMul,ONE); XCTAssertEqual(s.runners[4].taxMul,58982)
+    }
+    func testOverdueBillDimsAndIsKeptWhenOnlyFinishedRunnersAreAhead() {
+        let c=flat(); var s=arena(); s.runners[5].finished=0
+        give(&s,.overdueBill,to:4); XCTAssertFalse(canUse(s,runner:4,hand:0,course:c))
+        step(&s,inputs:[InputFrame(),InputFrame(),InputFrame(),InputFrame(),InputFrame(bits:4)],course:c)
+        XCTAssertEqual(s.inventories[4].hands[0],1); XCTAssertEqual(s.inventories[4].lockout,0); XCTAssertEqual(s.taxT,0)
+        give(&s,.overdueBill,to:3); XCTAssertTrue(canUse(s,runner:3,hand:0,course:c))
+    }
+    func testBotKeepsBillWithOnlyFinishedRunnersAheadAndStillUsesOtherHand() {
+        let c=flat()
+        var s=makeRace(RaceConfig(seed:42,runners:(0..<6).map { RunnerSetup(botTier:$0 == 4 ? 0 : nil,cast:$0) }),course:c)
+        for i in 0..<6 { s.runners[i]=running((20+i*3)*ONE) }
+        s.runners[5].finished=0; s.tick=1000
+        give(&s,.overdueBill,to:4); give(&s,.firstClass,to:4,hand:1)
+        step(&s,inputs:[],course:c)
+        XCTAssertEqual(s.inventories[4].hands,[1,-1]); XCTAssertEqual(s.taxT,0)
     }
     func testBillGuardBlocksThisBillAcrossLeadChanges() {
         let c=flat(); var s=arena(); give(&s,.overdueBill)
@@ -63,6 +97,19 @@ final class KnackTests: XCTestCase {
         XCTAssertEqual(s.runners[1].statusMul,45875); XCTAssertEqual(s.runners[1].statusT,36); XCTAssertEqual(s.runners[1].noHopT,30)
         step(&s,inputs:[InputFrame(),InputFrame(bits:1)],course:c); XCTAssertTrue(s.runners[1].grounded)
         XCTAssertEqual(s.runners[1].statusT,35)
+    }
+    func testBotsNoticeFloorTrapsAtTierRates() {
+        var rates: [[Int]]=[]
+        for tier in 0..<4 { rates.append([Knack.drawingPins,.gumPatch].map { k in (0..<200).filter { !trapRun(tier:tier,seed:UInt64($0),k).hit }.count*5 }) }
+        for (tier,expected) in [180,380,530,630].enumerated() { for rate in rates[tier] { XCTAssertEqual(rate,expected,accuracy:60) } }
+    }
+    func testNoticedTrapIsHoppedAndRollIsPerEncounter() {
+        for k in [Knack.drawingPins,.gumPatch] {
+            let (hit,s)=trapRun(tier:4,seed:42,k)
+            XCTAssertFalse(hit); XCTAssertEqual(s.runners[1].bonks,0); XCTAssertGreaterThan(s.runners[1].x,42*ONE)
+            XCTAssertTrue(s.traps.allSatisfy { $0.rolled == 2 && $0.noticed == 2 })
+            XCTAssertEqual(stateHash(trapRun(tier:4,seed:42,k).state),stateHash(s))
+        }
     }
     func testBubbleMailerOneHitThreeSecondsAndContinuousHazard() {
         var c=flat(); var s=arena(); give(&s,.bubbleMailer)

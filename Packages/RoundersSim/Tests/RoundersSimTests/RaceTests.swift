@@ -61,7 +61,7 @@ final class RaceTests: XCTestCase {
             XCTAssertEqual(stateHash(b),expected)
         }
         XCTAssertEqual(stateHash(a),stateHash(b)); XCTAssertEqual(a.runners.filter { $0.finished >= 0 }.count,6)
-        XCTAssertEqual(stateHash(a),0xf4b113528c0675d4)
+        XCTAssertEqual(stateHash(a),0x6d209086f1d4c7e6)
     }
     func testReplayHashCoversRNGPlansParcelsAndEvents() throws {
         let c=try CourseLoader.laundryLane(), s=makeRace(.demo(),course:c)
@@ -69,6 +69,11 @@ final class RaceTests: XCTestCase {
         b=s; b.bots[1]!.planT += 1; XCTAssertNotEqual(stateHash(s),stateHash(b))
         b=s; b.inventories[0].parcels=1; XCTAssertNotEqual(stateHash(s),stateHash(b))
         b=s; emit(&b,0,0); XCTAssertNotEqual(stateHash(s),stateHash(b))
+    }
+    func testGridStartsOnTheCourseStartRow() {
+        var c=flat(); c.startRow=12
+        let s=makeRace(.demo(),course:c)
+        XCTAssertTrue(s.runners.allSatisfy { $0.y == 12*ONE && $0.anchorY == 12*ONE })
     }
     func testRaceTimeoutOrdersDNF() throws {
         let c=try CourseLoader.laundryLane(); var s=makeRace(.demo(),course:c)

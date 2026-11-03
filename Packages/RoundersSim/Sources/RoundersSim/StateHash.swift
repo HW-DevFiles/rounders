@@ -17,7 +17,7 @@ public func stateHash(_ s: RaceState) -> UInt64 {
     int(s.runners.count)
     for r in s.runners {
         ints([r.guardT,r.immuneT,r.shakeT,r.stunT,r.x,r.y,r.vx,r.vy,r.coyote,r.hopBuf,r.fallTop,r.tuckTicks,r.roll,r.thud,r.bonkTimer,r.invuln,r.anchorX,r.anchorY,r.statusMul,r.statusT,r.speedMul,r.speedT,r.finished,r.bonks,r.bumps,r.rolls,r.stuckT,r.stuckX,r.noHopT,r.taxMul,r.streakAnchor,r.streak,r.mercies])
-        for b in [r.hazardContact,r.grounded,r.prevHop,r.prevDown,r.prevKnack,r.rising,r.plonking,r.tucked,r.alive,r.bumpFlag,r.bonkFlag] { bool(b) }
+        for b in [r.hazardContact,r.grounded,r.prevHop,r.prevDown,r.rising,r.plonking,r.tucked,r.alive,r.bumpFlag,r.bonkFlag] { bool(b) }
     }
     int(s.inventories.count)
     for b in s.inventories { ints(b.hands); ints(b.acquired); ints(b.cooldowns); ints([b.lastUsed,b.lockout]); word(b.parcels); word(b.rng.state); word(b.rng.inc) }
@@ -25,15 +25,15 @@ public func stateHash(_ s: RaceState) -> UInt64 {
     for optional in s.bots {
         bool(optional != nil)
         if let b=optional {
-            text(b.tier.name); ints([b.tier.margin,b.tier.jitter,b.tier.slipPermille,b.tier.slipLate,b.tier.rollPermille,b.tier.routeNoise,b.tier.reactPermille,b.tier.useDelay]); bool(b.tier.smart)
-            word(b.rng.state); word(b.rng.inc); plan(b.plan); ints([b.planT,b.pendingMargin,b.pendingSlip]); bool(b.committed)
+            text(b.tier.name); ints([b.tier.margin,b.tier.jitter,b.tier.slipPermille,b.tier.slipLate,b.tier.rollPermille,b.tier.routeNoise,b.tier.reactPermille,b.tier.useDelay,b.tier.noticePermille]); bool(b.tier.smart)
+            word(b.rng.state); word(b.rng.inc); plan(b.plan); ints([b.planT,b.pendingMargin,b.pendingSlip])
             int(b.bands.count); for band in b.bands { ints([band.x0,band.x1,band.yMin,band.yMax]) }
             int(b.entries.count); for e in b.entries { int(e.x); plan(e.plan) }
         }
     }
     int(s.routes.count); for routes in s.routes { ints(routes) }
     int(s.projectiles.count); for p in s.projectiles { ints([p.owner,p.x,p.y,p.remaining]) }
-    int(s.traps.count); for t in s.traps { ints([t.owner,t.kind,t.x0,t.x1,t.y,t.life,t.group]); int(Int(t.triggered)) }
+    int(s.traps.count); for t in s.traps { ints([t.owner,t.kind,t.x0,t.x1,t.y,t.life,t.group]); int(Int(t.triggered)); int(Int(t.rolled)); int(Int(t.noticed)) }
     int(s.events.count); for e in s.events { ints([e.tick,e.sequence,e.runner,e.kind,e.payload]) }
     return h
 }

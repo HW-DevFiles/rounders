@@ -37,12 +37,13 @@ enum Screen { case title, race, pause, results }
     @ObservationIgnored lazy var scene=RaceScene(model:self)
     let args=ProcessInfo.processInfo.arguments
     var autoplay: Bool { args.contains("-autoplay") }
+    var diagnostics: Bool { args.contains("-inputDebug") || args.contains("-uiTest") }
     var seed: UInt64 {
         if let i=args.firstIndex(of:"-seed"),i+1 < args.count { return UInt64(args[i+1]) ?? 42 }; return 42
     }
     init() {
         do { course=try CourseLoader.laundryLane() } catch { fatalError("Course resource failed validation: \(error)") }
-        virtualOK=controllers.selfTest()
+        if diagnostics { virtualOK=controllers.selfTest() }
         controllers.onDisconnect={ [weak self] in if self?.screen == .race { self?.pause() } }
     }
     func transition(_ to: Screen) {
@@ -92,7 +93,7 @@ enum Screen { case title, race, pause, results }
             }
         }
         menuPrevious=menu
-        if args.contains("-inputDebug") || args.contains("-uiTest") {
+        if diagnostics {
             debug="input:\(InputFrame(bits:raw).names) seen:\(InputFrame(bits:seen).names) padSeen:\(padSeen) menu:\(menu) pads:\(controllers.count) mt:\(multiTouch) virtual:\(virtualOK ? "ok" : "no") tick:\(snapshot?.tick ?? 0) nodes:\(scene.nodeCount) zoneCounts:\(zoneCounts.map(String.init).joined(separator:","))"
         }
     }

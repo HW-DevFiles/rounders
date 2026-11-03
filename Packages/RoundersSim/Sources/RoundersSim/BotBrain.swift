@@ -25,14 +25,15 @@ public struct Tier: Sendable {
     var routeNoise: Int  // centiseconds of noise on the route score
     var reactPermille: Int // chance to answer a visible threat with a guard
     var useDelay: Int    // ticks before a fresh knack is considered
+    var noticePermille: Int // chance to notice a floor trap on approach
     var smart: Bool      // knows chokepoints, holds guards, saves for the finish
 }
 public let tiers: [Tier] = [
-    Tier(name: "Errand",   margin: 14, jitter: 8, slipPermille: 70, slipLate: 14, rollPermille: 0,   routeNoise: 300, reactPermille: 100, useDelay: 150, smart: false),
-    Tier(name: "Regular",  margin: 10, jitter: 6, slipPermille: 40, slipLate: 14, rollPermille: 150, routeNoise: 180, reactPermille: 400, useDelay: 70,  smart: false),
-    Tier(name: "Express",  margin: 7,  jitter: 4, slipPermille: 15, slipLate: 12, rollPermille: 500, routeNoise: 80,  reactPermille: 750, useDelay: 25,  smart: true),
-    Tier(name: "Special",  margin: 5,  jitter: 2, slipPermille: 5,  slipLate: 10, rollPermille: 850, routeNoise: 30,  reactPermille: 950, useDelay: 8,   smart: true),
-    Tier(name: "Perfect",  margin: 4,  jitter: 0, slipPermille: 0,  slipLate: 0,  rollPermille: 1000, routeNoise: 0,  reactPermille: 1000, useDelay: 0,  smart: true),
+    Tier(name: "Errand",   margin: 14, jitter: 8, slipPermille: 70, slipLate: 14, rollPermille: 0,   routeNoise: 300, reactPermille: 100, useDelay: 150, noticePermille: 180, smart: false),
+    Tier(name: "Regular",  margin: 10, jitter: 6, slipPermille: 40, slipLate: 14, rollPermille: 150, routeNoise: 180, reactPermille: 400, useDelay: 70, noticePermille: 380,  smart: false),
+    Tier(name: "Express",  margin: 7,  jitter: 4, slipPermille: 15, slipLate: 12, rollPermille: 500, routeNoise: 80,  reactPermille: 750, useDelay: 25, noticePermille: 530,  smart: true),
+    Tier(name: "Special",  margin: 5,  jitter: 2, slipPermille: 5,  slipLate: 10, rollPermille: 850, routeNoise: 30,  reactPermille: 950, useDelay: 8, noticePermille: 630,   smart: true),
+    Tier(name: "Perfect",  margin: 4,  jitter: 0, slipPermille: 0,  slipLate: 0,  rollPermille: 1000, routeNoise: 0,  reactPermille: 1000, useDelay: 0, noticePermille: 1000,  smart: true),
 ]
 
 public enum Plan: Equatable, Sendable { case none, hop(Int), tuck(Int), hopPlonk(Int, Int) }
@@ -59,7 +60,7 @@ func bandFail(_ r: Runner, _ bands: [Band]) -> Bool {
     return false
 }
 
-func probe(_ start: Runner, _ tick: Int, _ plan: Plan, delay: Int, horizon: Int, _ c: CourseData, _ bands: [Band], heldHop: Bool, heldDown: Bool) -> Eval {
+func probe(_ start: Runner, _ tick: Int, _ plan: Plan, delay: Int, horizon: Int, _ c: CourseData, _ bands: [Band], heldHop: Bool, heldDown: Bool, traps: [Trap] = []) -> Eval {
     var r = start
     var land = -1
     var wasAir = !start.grounded
@@ -73,6 +74,7 @@ func probe(_ start: Runner, _ tick: Int, _ plan: Plan, delay: Int, horizon: Int,
         if !r.alive || r.bonkFlag { e.fail = .bonk; e.failAt = t; break }
         if r.bumpFlag { e.fail = .bump; e.failAt = t; break }
         if bandFail(r, bands) { e.fail = .band; e.failAt = t; break }
+        if traps.contains(where: { touches($0, r) }) { e.fail = .trap; e.failAt = t; break }
         if !r.grounded { wasAir = true }
         if land < 0 && wasAir && r.grounded { land = t }
         if r.finished >= 0 { break }
@@ -89,7 +91,6 @@ public struct Bot: Sendable {
     var pendingMargin = -1
     var pendingSlip = 0
     var bands: [Band] = []
-    var committed = false
     var entries: [Entry] = []
     init(tier: Tier, seed: UInt64, id: UInt64) { self.tier = tier; rng = PCG(seed: seed, seq: id + 11) }
     func options(_ r: Runner) -> [Plan] {
@@ -100,7 +101,17 @@ public struct Bot: Sendable {
         if e.landAt >= 0 && e.failAt > e.landAt + 14 { return true }
         return false
     }
-    mutating func decide(_ r: Runner, _ tick: Int, _ c: CourseData) -> Input {
+    // The first plan airborne at the run's contact tick that lands clear of every noticed trap.
+    func trapAnswer(_ r: Runner, _ tick: Int, _ c: CourseData, _ horizon: Int, _ traps: [Trap]) -> Plan? {
+        guard !traps.isEmpty else { return nil }
+        let run = probe(r, tick, .none, delay: 0, horizon: horizon, c, bands, heldHop: false, heldDown: false, traps: traps)
+        guard run.fail == .trap else { return nil }
+        return options(r).first { o in
+            let e = probe(r, tick, o, delay: 0, horizon: horizon, c, bands, heldHop: false, heldDown: false, traps: traps)
+            return acceptable(e, o) && e.landAt > run.failAt
+        }
+    }
+    mutating func decide(_ r: Runner, _ tick: Int, _ c: CourseData, avoiding traps: [Trap] = []) -> Input {
         if !r.alive || r.finished >= 0 { plan = .none; planT = 0; return Input() }
         // route entry recipes outrank everything else
         if (r.grounded || r.coyote > 0), let e = entries.first {
@@ -135,7 +146,7 @@ public struct Bot: Sendable {
                 var landed = false
                 for t in 0..<40 {
                     step(&s, Input(hop: false, down: true), tick + t, c)
-                    if s.bonkFlag || !s.alive || s.bumpFlag { ok = false; break }
+                    if s.bonkFlag || !s.alive || s.bumpFlag || traps.contains(where: { touches($0, s) }) { ok = false; break }
                     if s.grounded { landed = true; ok = s.rolls > r.rolls && !bandFail(s, bands); break }
                 }
                 if landed && ok && rng.chance(tier.rollPermille / 12 + 1) {
@@ -149,7 +160,11 @@ public struct Bot: Sendable {
         // grounded: does running straight survive?
         let horizon = 110
         let straight = probe(r, tick, .none, delay: 0, horizon: horizon, c, bands, heldHop: false, heldDown: false)
-        if acceptable(straight, .none) { pendingMargin = -1; pendingSlip = 0; return Input() }
+        if acceptable(straight, .none) {
+            pendingMargin = -1; pendingSlip = 0
+            if let o = trapAnswer(r, tick, c, horizon, traps) { plan = o; planT = 1; return inputFor(o, 0) }
+            return Input()
+        }
         // new obstacle: sample read quality once
         if pendingMargin < 0 {
             pendingMargin = max(0, tier.margin + rng.tri(tier.jitter))

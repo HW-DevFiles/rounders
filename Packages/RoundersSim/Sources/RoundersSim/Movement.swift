@@ -41,11 +41,11 @@ public struct Tune: Sendable {
 //  . empty   # solid   = one-way   - fast wire (one-way x1.25)   > fast belt x1.30   < drag x0.80
 //  ^ floor spike   v hanging spike   S spring   H hatch (solid unless plonking)   P parcel   R anchor (overlay)
 public struct Input: Sendable {
- public var hop, down, knack: Bool
- public init(hop: Bool = false, down: Bool = false, knack: Bool = false) { self.hop=hop; self.down=down; self.knack=knack }
+ public var hop, down: Bool
+ public init(hop: Bool = false, down: Bool = false) { self.hop=hop; self.down=down }
 }
 
-enum Fail: Int { case none = 0, bonk, bump, band }
+enum Fail: Int { case none = 0, bonk, bump, band, trap }
 
 public struct Runner: Sendable {
     public init() {}
@@ -54,7 +54,7 @@ public struct Runner: Sendable {
     public var x = 0, y = 0, vx = 0, vy = 0
     public var grounded = false
     public var coyote = 0, hopBuf = 0
-    public var prevHop = false, prevDown = false, prevKnack = false
+    public var prevHop = false, prevDown = false
     public var rising = false, plonking = false
     public var fallTop = 0
     public var tucked = false, tuckTicks = 0, roll = 0, thud = 0
@@ -104,7 +104,7 @@ public func step(_ r: inout Runner, _ i: Input, _ tick: Int, _ c: CourseData) {
             r.rising = false; r.hopBuf = 0; r.coyote = 0
             r.guardT = 0; r.immuneT = 0; r.shakeT = 0; r.stunT = 0; r.noHopT = 0; r.hazardContact = false
         }
-        r.prevHop = i.hop; r.prevDown = i.down; r.prevKnack = i.knack
+        r.prevHop = i.hop; r.prevDown = i.down
         return
     }
     if r.invuln > 0 { r.invuln -= 1 }
@@ -113,7 +113,7 @@ public func step(_ r: inout Runner, _ i: Input, _ tick: Int, _ c: CourseData) {
     if r.noHopT > 0 { r.noHopT -= 1 }
     let pressHop = i.hop && !r.prevHop
     let pressDown = i.down && !r.prevDown
-    r.prevHop = i.hop; r.prevDown = i.down; r.prevKnack = i.knack
+    r.prevHop = i.hop; r.prevDown = i.down
     if pressHop { r.hopBuf = Tune.hopBuffer } else if r.hopBuf > 0 { r.hopBuf -= 1 }
     // hop (ignored while tucked under a ceiling: the buffer keeps it alive for the exit)
     let hopCL = (r.x - Tune.w / 2) >> 16, hopCR = (r.x + Tune.w / 2 - 1) >> 16

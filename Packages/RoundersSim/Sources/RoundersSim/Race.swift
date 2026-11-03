@@ -37,6 +37,7 @@ public struct Projectile: Sendable {
 public struct Trap: Sendable {
     public var owner, kind, x0, x1, y, life, group: Int
     public var triggered: UInt8 = 0
+    public var rolled: UInt8 = 0, noticed: UInt8 = 0
 }
 public struct SimEvent: Sendable {
     public var tick, sequence, runner, kind, payload: Int
@@ -64,6 +65,7 @@ public struct RaceState: Sendable {
         }
         return x.x == y.x ? a < b : x.x > y.x
     } }
+    public var leadingUnfinished: Int? { places.first { runners[$0].finished < 0 } }
 }
 public func makeRace(_ config: RaceConfig, course: CourseData) -> RaceState {
     precondition(config.runners.count == 6)
@@ -72,8 +74,8 @@ public func makeRace(_ config: RaceConfig, course: CourseData) -> RaceState {
     for i in stride(from:5,through:1,by:-1) { grid.swapAt(i,rng.below(i+1)) }
     var runners: [Runner]=[]
     for x in grid {
-        var r=Runner(); r.x=x*ONE+ONE/2; r.y=10*ONE; r.grounded=true
-        r.anchorX=6*ONE+ONE/2; r.anchorY=10*ONE; r.stuckX=r.x
+        var r=Runner(); r.x=x*ONE+ONE/2; r.y=course.startRow*ONE; r.grounded=true
+        r.anchorX=6*ONE+ONE/2; r.anchorY=course.startRow*ONE; r.stuckX=r.x
         runners.append(r)
     }
     return RaceState(config:config,runners:runners,inventories:(0..<6).map { Inventory(seed:config.seed,id:$0) },bots:config.runners.enumerated().map { i,s in s.botTier.map { Bot(tier:tiers[$0],seed:config.seed,id:UInt64(i)) } },routes:[[Int]](repeating:[Int](repeating:-1,count:course.forks.count),count:6))
@@ -105,7 +107,7 @@ public func canUse(_ s: RaceState, runner: Int, hand: Int, course: CourseData) -
     let r=s.runners[runner], bag=s.inventories[runner], k=bag.hands[hand]
     guard r.alive && r.finished < 0 && bag.lockout == 0 && k >= 0 && (r.stunT == 0 || k == Knack.tamperSeal.rawValue) else { return false }
     if k == 0 { return dartTarget(s,owner:runner,course:course) != nil }
-    if k == 1 { return s.places.first != runner }
+    if k == 1 { return s.leadingUnfinished != runner }
     return true
 }
 public func applyHit(_ s: inout RaceState, target: Int, multiplier: Int, duration: Int, gum: Bool = false) {
@@ -174,7 +176,7 @@ func botHand(_ s: inout RaceState, _ id: Int, _ c: CourseData) -> Int? {
         var use=false
         switch k {
         case .paperDart: use=ahead
-        case .overdueBill: use=place > 0 && (!bot.tier.smart || place <= 3 || late)
+        case .overdueBill: use=s.leadingUnfinished != id && (!bot.tier.smart || place <= 3 || late)
         case .drawingPins,.gumPatch: use=behind && (!bot.tier.smart || late || stale || c.chokepoints.contains { abs($0*ONE-r.x)<3*ONE }) || (!bot.tier.smart && stale)
         case .bubbleMailer: use=(threat && bot.rng.chance(bot.tier.reactPermille)) || (!bot.tier.smart && stale)
         case .tamperSeal: use=r.statusT > 0 || r.noHopT > 0 || r.stunT > 0 || (!bot.tier.smart && stale)
@@ -184,15 +186,35 @@ func botHand(_ s: inout RaceState, _ id: Int, _ c: CourseData) -> Int? {
     }
     return nil
 }
+func touches(_ t: Trap, _ r: Runner) -> Bool {
+    r.x+Tune.w/2 > t.x0 && r.x-Tune.w/2 < t.x1 && r.y < t.y+ONE/3 && r.y+Tune.hStand > t.y
+}
+// A bot rolls once per trap group it approaches; the three Pins share one roll.
+func noticedTraps(_ s: inout RaceState, _ id: Int) -> [Trap] {
+    guard var bot=s.bots[id] else { return [] }
+    let r=s.runners[id], mask=UInt8(1) << id
+    guard r.alive && r.finished < 0 else { return [] }
+    for ti in s.traps.indices {
+        let t=s.traps[ti]
+        guard t.owner != id && t.rolled & mask == 0 && t.x1 > r.x && t.x0-r.x <= 8*ONE && abs(t.y-r.y) <= 2*ONE else { continue }
+        let noticed=bot.rng.chance(bot.tier.noticePermille)
+        for tj in s.traps.indices where s.traps[tj].group == t.group {
+            s.traps[tj].rolled |= mask
+            if noticed { s.traps[tj].noticed |= mask }
+        }
+    }
+    s.bots[id]=bot
+    return s.traps.filter { $0.life > 0 && $0.noticed & mask != 0 && $0.triggered & mask == 0 }
+}
 public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseData) {
     guard !s.complete else { return }
-    let places=s.places
+    let places=s.places, taxTarget=s.leadingUnfinished
     // Bill is a continuous global status, with one hit/guard decision per
     // runner per Bill. A shield absorbs that Bill, including later lead changes.
     for id in 0..<6 {
         s.runners[id].taxMul=ONE
         let mask: UInt8=1 << id
-        guard s.taxT > 0 && places.first == id && id != s.taxSender && s.taxBlocked & mask == 0 && s.runners[id].alive && s.runners[id].invuln == 0 && s.runners[id].immuneT == 0 else { continue }
+        guard s.taxT > 0 && taxTarget == id && id != s.taxSender && s.taxBlocked & mask == 0 && s.runners[id].alive && s.runners[id].invuln == 0 && s.runners[id].immuneT == 0 else { continue }
         if s.taxAffected & mask == 0 {
             if s.runners[id].guardT > 0 {
                 s.runners[id].guardT=0; s.taxBlocked |= mask; emit(&s,id,9); continue
@@ -211,8 +233,9 @@ public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseDat
         s.runners[id].guardT=max(0,s.runners[id].guardT-1); s.runners[id].immuneT=max(0,s.runners[id].immuneT-1)
         s.runners[id].shakeT=max(0,s.runners[id].shakeT-1); s.runners[id].stunT=max(0,s.runners[id].stunT-1)
         var frame = id < inputs.count ? inputs[id] : InputFrame()
+        let noticed=noticedTraps(&s,id)
         if var bot=s.bots[id] {
-            let movement=bot.decide(s.runners[id],s.tick+s.config.clockOffset,c)
+            let movement=bot.decide(s.runners[id],s.tick+s.config.clockOffset,c,avoiding:noticed)
             s.bots[id]=bot
             frame=InputFrame(bits:(movement.hop ? 1 : 0)|(movement.down ? 2 : 0))
             if let h=botHand(&s,id,c) { frame.bits |= h == 0 ? 4 : 8 }
@@ -243,7 +266,7 @@ public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseDat
         }
         for ti in s.traps.indices {
             let t=s.traps[ti]
-            if t.life > 0 && t.owner != id && t.triggered & (1<<id) == 0 && r.x+Tune.w/2 > t.x0 && r.x-Tune.w/2 < t.x1 && r.y < t.y+ONE/3 && r.y+Tune.hStand > t.y {
+            if t.life > 0 && t.owner != id && t.triggered & (1<<id) == 0 && touches(t,r) {
                 applyHit(&s,target:id,multiplier:t.kind == 2 ? 36045 : 45875,duration:36,gum:t.kind == 3)
                 s.traps[ti].triggered |= 1<<id
                 if t.kind == 2 { s.traps[ti].life=0 }

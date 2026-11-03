@@ -7,7 +7,7 @@ import RoundersInput
 func flat(width: Int = 800) -> CourseData {
     var t=[UInt8](repeating:46,count:width*24)
     for x in 0..<width { t[9*width+x]=35 }
-    return CourseData(name:"Test",w:width,h:24,finishX:width-2,tiles:t,anchors:[Point(6,10),Point(30,10)])
+    return CourseData(name:"Test",w:width,h:24,finishX:width-2,startRow:10,tiles:t,anchors:[Point(6,10),Point(30,10)])
 }
 func running(_ x: Int = 6*ONE, y: Int = 10*ONE) -> Runner {
     var r=Runner(); r.x=x; r.y=y; r.vx=Tune.vBase; r.grounded=true; r.anchorX=x; r.anchorY=y; r.stuckX=x; return r

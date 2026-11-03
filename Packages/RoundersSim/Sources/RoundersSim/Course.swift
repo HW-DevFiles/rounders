@@ -28,11 +28,11 @@ public struct Fork: Sendable {
  public init(name: String, x0: Int, x1: Int, routes: [Route]) { self.name=name; self.x0=x0; self.x1=x1; self.routes=routes }
 }
 public struct CourseData: Sendable {
- public var name: String; public var w, h, finishX: Int
+ public var name: String; public var w, h, finishX, startRow: Int
  public var t: [UInt8]; public var hazards: [Hazard]; public var forks: [Fork]
- public var parcels, anchors: [Point]; public var gates, chokepoints: [Int]
- public init(name: String, w: Int, h: Int, finishX: Int, tiles: [UInt8], hazards: [Hazard] = [], forks: [Fork] = [], parcels: [Point] = [], anchors: [Point] = [], gates: [Int] = [], chokepoints: [Int] = []) {
- self.name=name; self.w=w; self.h=h; self.finishX=finishX; t=tiles; self.hazards=hazards; self.forks=forks; self.parcels=parcels; self.anchors=anchors; self.gates=gates; self.chokepoints=chokepoints
+ public var parcels, anchors: [Point]; public var chokepoints: [Int]
+ public init(name: String, w: Int, h: Int, finishX: Int, startRow: Int, tiles: [UInt8], hazards: [Hazard] = [], forks: [Fork] = [], parcels: [Point] = [], anchors: [Point] = [], chokepoints: [Int] = []) {
+ self.name=name; self.w=w; self.h=h; self.finishX=finishX; self.startRow=startRow; t=tiles; self.hazards=hazards; self.forks=forks; self.parcels=parcels; self.anchors=anchors; self.chokepoints=chokepoints
  }
  @inline(__always) public func at(_ c: Int, _ r: Int) -> UInt8 {
  if c < 0 || c >= w { return 35 }; if r < 0 || r >= h { return 46 }; return t[r*w+c]

@@ -12,7 +12,7 @@ public enum CourseLoader {
     public static func load(_ data: Data) throws -> CourseData {
         let d = try JSONDecoder().decode(Document.self, from: data)
         func require(_ valid: Bool, _ message: String) throws { if !valid { throw CourseError.invalid(message) } }
-        try require(d.format == 1 && d.width > 0 && d.height > 3 && d.finishX > 0 && d.finishX < d.width, "Invalid dimensions/version")
+        try require(d.format == 1 && d.width > 0 && d.height > 3 && d.finishX > 0 && d.finishX < d.width && d.startRow > 0 && d.startRow < d.height-2, "Invalid dimensions/version")
         try require(d.rows.count == d.height && d.rows.allSatisfy { $0.utf8.count == d.width }, "Invalid rows")
         let allowed = Array(".#=-><^vSHP".utf8)
         try require(d.rows.allSatisfy { $0.utf8.allSatisfy { allowed.contains($0) } }, "Unknown tile")
@@ -45,11 +45,11 @@ public enum CourseLoader {
             }
             return Fork(name:f.name,x0:f.x0,x1:f.x1,routes:routes)
         }
-        return CourseData(name:d.name,w:d.width,h:d.height,finishX:d.finishX,tiles:tiles,hazards:hazards,forks:forks,parcels:parcels,anchors:anchors,gates:d.gates,chokepoints:d.chokepoints)
+        return CourseData(name:d.name,w:d.width,h:d.height,finishX:d.finishX,startRow:d.startRow,tiles:tiles,hazards:hazards,forks:forks,parcels:parcels,anchors:anchors,chokepoints:d.chokepoints)
     }
     private struct Document: Decodable {
         var format: Int; var name: String; var width, height, finishX, startRow: Int
-        var rows: [String]; var anchors: [[Int]]; var gates, chokepoints: [Int]
+        var rows: [String]; var anchors: [[Int]]; var chokepoints: [Int]
         var hazards: [HazardDoc]; var forks: [ForkDoc]
     }
     private struct HazardDoc: Decodable { var kind: String; var x0,x1,period,on,phase: Int; var y0,y1: Double }

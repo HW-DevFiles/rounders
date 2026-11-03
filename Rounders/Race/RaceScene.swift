@@ -107,10 +107,6 @@ struct TouchGeometry {
             if model.autoplay {
                 let line="ROUNDERS_RESULT seed=\(s.config.seed) tick=\(s.tick) hash=\(String(stateHash(s),radix:16)) finishers=\(s.runners.filter { $0.finished >= 0 }.count) \(s.places.map { "\(castNames[$0]):\(s.runners[$0].finished)" })"
                 NSLog("%@",line)
-                // A simulator-console bridge may detach; retain the latest
-                // diagnostic result inside this app's temporary directory too.
-                let log=FileManager.default.temporaryDirectory.appendingPathComponent("rounders-autoplay.log")
-                try? (line+"\n").write(to:log,atomically:true,encoding:.utf8)
             }
             model.firstRace=false; model.transition(.results)
         }
