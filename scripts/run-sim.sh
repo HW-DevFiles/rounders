@@ -2,11 +2,8 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$ROOT"
-DERIVED_DATA=${ROUNDERS_DERIVED_DATA:-${TMPDIR:-/tmp}/rounders-derived-data}
-SIM_ID=${SIMULATOR_UDID:-}
-if [[ -z "$SIM_ID" ]]; then
-    SIM_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((x["udid"] for devices in d["devices"].values() for x in devices if x["name"]=="rounders-demo"),""))')
-fi
+DERIVED_DATA=${TMPDIR:-/tmp}/rounders-derived-data
+SIM_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((x["udid"] for devices in d["devices"].values() for x in devices if x["name"]=="rounders-demo"),""))')
 if [[ -z "$SIM_ID" ]]; then
     RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and x["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; r.sort(key=lambda x:tuple(map(int,x["version"].split(".")))); print(r[-1]["identifier"] if r else "")')
     if [[ -z "$RUNTIME" ]]; then echo 'Install an iOS simulator runtime in Xcode Settings → Components.' >&2; exit 1; fi
