@@ -189,21 +189,21 @@ func botHand(_ s: inout RaceState, _ id: Int, _ c: CourseData) -> Int? {
 func touches(_ t: Trap, _ r: Runner) -> Bool {
     r.x+Tune.w/2 > t.x0 && r.x-Tune.w/2 < t.x1 && r.y < t.y+ONE/3 && r.y+Tune.hStand > t.y
 }
-// A bot rolls once per trap group it approaches; the three Pins share one roll.
-func noticedTraps(_ s: inout RaceState, _ id: Int) -> [Trap] {
-    guard var bot=s.bots[id] else { return [] }
+// A bot rolls once per trap its look-ahead run reaches; the three Pins share one roll.
+func noticedTraps(_ s: inout RaceState, _ id: Int, _ c: CourseData) -> [Trap] {
+    guard let bot=s.bots[id] else { return [] }
     let r=s.runners[id], mask=UInt8(1) << id
     guard r.alive && r.finished < 0 else { return [] }
-    for ti in s.traps.indices {
-        let t=s.traps[ti]
-        guard t.owner != id && t.rolled & mask == 0 && t.x1 > r.x && t.x0-r.x <= 8*ONE && abs(t.y-r.y) <= 2*ONE else { continue }
-        let noticed=bot.rng.chance(bot.tier.noticePermille)
-        for tj in s.traps.indices where s.traps[tj].group == t.group {
-            s.traps[tj].rolled |= mask
-            if noticed { s.traps[tj].noticed |= mask }
+    let unread=s.traps.filter { $0.life > 0 && $0.owner != id && $0.rolled & mask == 0 && $0.x1 > r.x }
+    let run=probe(r,s.tick+s.config.clockOffset,.none,delay:0,horizon:unread.isEmpty ? 0 : Bot.lookAhead,c,bot.bands,heldHop:false,heldDown:false,traps:unread)
+    if run.fail == .trap {
+        var roll=PCG(seed:s.config.seed &+ UInt64(run.trapGroup),seq:UInt64(id)+200)
+        let noticed=roll.chance(bot.tier.trapNotice)
+        for ti in s.traps.indices where s.traps[ti].group == run.trapGroup {
+            s.traps[ti].rolled |= mask
+            if noticed { s.traps[ti].noticed |= mask }
         }
     }
-    s.bots[id]=bot
     return s.traps.filter { $0.life > 0 && $0.noticed & mask != 0 && $0.triggered & mask == 0 }
 }
 public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseData) {
@@ -233,7 +233,7 @@ public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseDat
         s.runners[id].guardT=max(0,s.runners[id].guardT-1); s.runners[id].immuneT=max(0,s.runners[id].immuneT-1)
         s.runners[id].shakeT=max(0,s.runners[id].shakeT-1); s.runners[id].stunT=max(0,s.runners[id].stunT-1)
         var frame = id < inputs.count ? inputs[id] : InputFrame()
-        let noticed=noticedTraps(&s,id)
+        let noticed=noticedTraps(&s,id,c)
         if var bot=s.bots[id] {
             let movement=bot.decide(s.runners[id],s.tick+s.config.clockOffset,c,avoiding:noticed)
             s.bots[id]=bot

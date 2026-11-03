@@ -25,20 +25,20 @@ public struct Tier: Sendable {
     var routeNoise: Int  // centiseconds of noise on the route score
     var reactPermille: Int // chance to answer a visible threat with a guard
     var useDelay: Int    // ticks before a fresh knack is considered
-    var noticePermille: Int // chance to notice a floor trap on approach
+    var trapNotice: Int  // permille chance to notice a floor trap on its path
     var smart: Bool      // knows chokepoints, holds guards, saves for the finish
 }
 public let tiers: [Tier] = [
-    Tier(name: "Errand",   margin: 14, jitter: 8, slipPermille: 70, slipLate: 14, rollPermille: 0,   routeNoise: 300, reactPermille: 100, useDelay: 150, noticePermille: 180, smart: false),
-    Tier(name: "Regular",  margin: 10, jitter: 6, slipPermille: 40, slipLate: 14, rollPermille: 150, routeNoise: 180, reactPermille: 400, useDelay: 70, noticePermille: 380,  smart: false),
-    Tier(name: "Express",  margin: 7,  jitter: 4, slipPermille: 15, slipLate: 12, rollPermille: 500, routeNoise: 80,  reactPermille: 750, useDelay: 25, noticePermille: 530,  smart: true),
-    Tier(name: "Special",  margin: 5,  jitter: 2, slipPermille: 5,  slipLate: 10, rollPermille: 850, routeNoise: 30,  reactPermille: 950, useDelay: 8, noticePermille: 630,   smart: true),
-    Tier(name: "Perfect",  margin: 4,  jitter: 0, slipPermille: 0,  slipLate: 0,  rollPermille: 1000, routeNoise: 0,  reactPermille: 1000, useDelay: 0, noticePermille: 1000,  smart: true),
+    Tier(name: "Errand",   margin: 14, jitter: 8, slipPermille: 70, slipLate: 14, rollPermille: 0,   routeNoise: 300, reactPermille: 100, useDelay: 150, trapNotice: 180, smart: false),
+    Tier(name: "Regular",  margin: 10, jitter: 6, slipPermille: 40, slipLate: 14, rollPermille: 150, routeNoise: 180, reactPermille: 400, useDelay: 70, trapNotice: 380,  smart: false),
+    Tier(name: "Express",  margin: 7,  jitter: 4, slipPermille: 15, slipLate: 12, rollPermille: 500, routeNoise: 80,  reactPermille: 750, useDelay: 25, trapNotice: 530,  smart: true),
+    Tier(name: "Special",  margin: 5,  jitter: 2, slipPermille: 5,  slipLate: 10, rollPermille: 850, routeNoise: 30,  reactPermille: 950, useDelay: 8, trapNotice: 630,   smart: true),
+    Tier(name: "Perfect",  margin: 4,  jitter: 0, slipPermille: 0,  slipLate: 0,  rollPermille: 1000, routeNoise: 0,  reactPermille: 1000, useDelay: 0, trapNotice: 1000,  smart: true),
 ]
 
 public enum Plan: Equatable, Sendable { case none, hop(Int), tuck(Int), hopPlonk(Int, Int) }
 
-struct Eval { var fail: Fail; var failAt: Int; var landAt: Int; var pressGrounded: Bool = true }
+struct Eval { var fail: Fail; var failAt: Int; var landAt: Int; var pressGrounded: Bool = true; var trapGroup = -1 }
 
 @inline(__always) func inputFor(_ p: Plan, _ t: Int) -> Input {
     var i = Input()
@@ -74,7 +74,7 @@ func probe(_ start: Runner, _ tick: Int, _ plan: Plan, delay: Int, horizon: Int,
         if !r.alive || r.bonkFlag { e.fail = .bonk; e.failAt = t; break }
         if r.bumpFlag { e.fail = .bump; e.failAt = t; break }
         if bandFail(r, bands) { e.fail = .band; e.failAt = t; break }
-        if traps.contains(where: { touches($0, r) }) { e.fail = .trap; e.failAt = t; break }
+        if let hit = traps.first(where: { touches($0, r) }) { e.fail = .trap; e.failAt = t; e.trapGroup = hit.group; break }
         if !r.grounded { wasAir = true }
         if land < 0 && wasAir && r.grounded { land = t }
         if r.finished >= 0 { break }
@@ -84,6 +84,7 @@ func probe(_ start: Runner, _ tick: Int, _ plan: Plan, delay: Int, horizon: Int,
 }
 
 public struct Bot: Sendable {
+    static let lookAhead = 110
     var tier: Tier
     var rng: PCG
     var plan: Plan = .none
@@ -158,7 +159,7 @@ public struct Bot: Sendable {
         }
         if bandFail(r, bands) { let col = r.x >> 16; bands.removeAll { col >= $0.x0 && col <= $0.x1 } }
         // grounded: does running straight survive?
-        let horizon = 110
+        let horizon = Bot.lookAhead
         let straight = probe(r, tick, .none, delay: 0, horizon: horizon, c, bands, heldHop: false, heldDown: false)
         if acceptable(straight, .none) {
             pendingMargin = -1; pendingSlip = 0

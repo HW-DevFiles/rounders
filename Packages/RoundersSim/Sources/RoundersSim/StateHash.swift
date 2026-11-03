@@ -25,7 +25,7 @@ public func stateHash(_ s: RaceState) -> UInt64 {
     for optional in s.bots {
         bool(optional != nil)
         if let b=optional {
-            text(b.tier.name); ints([b.tier.margin,b.tier.jitter,b.tier.slipPermille,b.tier.slipLate,b.tier.rollPermille,b.tier.routeNoise,b.tier.reactPermille,b.tier.useDelay,b.tier.noticePermille]); bool(b.tier.smart)
+            text(b.tier.name); ints([b.tier.margin,b.tier.jitter,b.tier.slipPermille,b.tier.slipLate,b.tier.rollPermille,b.tier.routeNoise,b.tier.reactPermille,b.tier.useDelay,b.tier.trapNotice]); bool(b.tier.smart)
             word(b.rng.state); word(b.rng.inc); plan(b.plan); ints([b.planT,b.pendingMargin,b.pendingSlip])
             int(b.bands.count); for band in b.bands { ints([band.x0,band.x1,band.yMin,band.yMax]) }
             int(b.entries.count); for e in b.entries { int(e.x); plan(e.plan) }

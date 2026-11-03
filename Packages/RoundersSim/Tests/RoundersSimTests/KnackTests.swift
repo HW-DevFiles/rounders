@@ -100,7 +100,7 @@ final class KnackTests: XCTestCase {
     }
     func testBotsNoticeFloorTrapsAtTierRates() {
         var rates: [[Int]]=[]
-        for tier in 0..<4 { rates.append([Knack.drawingPins,.gumPatch].map { k in (0..<200).filter { !trapRun(tier:tier,seed:UInt64($0),k).hit }.count*5 }) }
+        for tier in 0..<4 { rates.append([Knack.drawingPins,.gumPatch].map { k in (0..<1000).filter { !trapRun(tier:tier,seed:UInt64($0),k).hit }.count }) }
         for (tier,expected) in [180,380,530,630].enumerated() { for rate in rates[tier] { XCTAssertEqual(rate,expected,accuracy:60) } }
     }
     func testNoticedTrapIsHoppedAndRollIsPerEncounter() {
@@ -110,6 +110,17 @@ final class KnackTests: XCTestCase {
             XCTAssertTrue(s.traps.allSatisfy { $0.rolled == 2 && $0.noticed == 2 })
             XCTAssertEqual(stateHash(trapRun(tier:4,seed:42,k).state),stateHash(s))
         }
+    }
+    func testTrapIsRolledOnlyOnTheBotsPathWithinLookAhead() {
+        let c=flat()
+        var s=makeRace(RaceConfig(seed:42,runners:(0..<6).map { RunnerSetup(botTier:$0 == 1 ? 4 : nil,cast:$0) }),course:c)
+        for i in 0..<6 { s.runners[i]=running((200+i*3)*ONE) }
+        s.runners[1]=running(20*ONE)
+        s.traps=[Trap(owner:0,kind:3,x0:30*ONE,x1:34*ONE,y:12*ONE,life:600,group:1),Trap(owner:0,kind:3,x0:60*ONE,x1:64*ONE,y:10*ONE,life:600,group:2)]
+        step(&s,inputs:[],course:c)
+        XCTAssertEqual(s.traps.map { $0.rolled },[0,0])
+        while s.runners[1].x < 66*ONE { step(&s,inputs:[],course:c) }
+        XCTAssertEqual(s.traps.map { $0.rolled },[0,2])
     }
     func testBubbleMailerOneHitThreeSecondsAndContinuousHazard() {
         var c=flat(); var s=arena(); give(&s,.bubbleMailer)

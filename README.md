@@ -90,8 +90,6 @@ xcodebuild -project Rounders.xcodeproj -scheme Rounders -sdk iphoneos \
 
 Simulator UI tests press all four zones before and after scrolling and landscape reversal, exercise pause/restart/title, and verify a snapshot controller’s face buttons, shoulders, triggers, D-pad, stick and disconnect path. The scene uses 210 nodes, below its 300-node budget. The simulation tests cover all seven Laundry Lane routes without Bonks and with full route adherence. The gap-2 timing fixture accepts 40 ticks (667 ms): firstmate approved this one-tick sampling boundary difference from the design’s 39; shifting the approach by a quarter tick measures 39. All other gap/wall windows and hop/plonk tables match.
 
-GitHub Actions runs the package/replay checks plus simulator and unsigned device builds.
-
 The map rows retain SHA-256 `5d00e468b8fdbb4bfb3aeebd69025277c8d4203c691767331e24871569f511ab`; it has 18 parcels, 4 timed hazards and **23 anchors** after the approved recovery fix. [Simulation rules](docs/simulation.md) specify edge cases and the replay format.
 
 ### Free personal-team signing later
