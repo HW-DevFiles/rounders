@@ -1,0 +1,5 @@
+// Team and bundle id stay out of the public repo. A real-device install only needs Signing.local.xcconfig.
+PRODUCT_BUNDLE_IDENTIFIER = dev.rounders.game
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+#include? "Signing.local.xcconfig"
