@@ -53,6 +53,7 @@ public struct RaceState: Sendable {
     public var events: [SimEvent] = []
     public var tick = 0, sequence = 0
     public var taxT = 0, taxSender = -1, trapGroup = 0
+    public var taxAffected: UInt8 = 0, taxBlocked: UInt8 = 0
     public var playerFinishedAt = -1
     public var complete = false
     public var places: [Int] { runners.indices.sorted { a,b in
@@ -122,7 +123,7 @@ public func useKnack(_ s: inout RaceState, runner id: Int, hand: Int, course: Co
     switch k {
     case .paperDart:
         if s.projectiles.count < 32 { s.projectiles.append(Projectile(owner:id,x:r.x+Tune.w/2,y:r.y+78643,remaining:18*ONE)) }
-    case .overdueBill: s.taxT=360; s.taxSender=id
+    case .overdueBill: s.taxT=360; s.taxSender=id; s.taxAffected=0; s.taxBlocked=0
     case .drawingPins, .gumPatch:
         s.trapGroup += 1
         let groups=s.traps.filter { $0.owner == id }.map { $0.group }
@@ -140,7 +141,7 @@ public func useKnack(_ s: inout RaceState, runner id: Int, hand: Int, course: Co
         }
     case .bubbleMailer: s.runners[id].guardT=180
     case .tamperSeal:
-        s.runners[id].statusT=0; s.runners[id].statusMul=ONE; s.runners[id].noHopT=0; s.runners[id].stunT=0; s.runners[id].shakeT=0; s.runners[id].immuneT=120
+        s.runners[id].statusT=0; s.runners[id].statusMul=ONE; s.runners[id].noHopT=0; s.runners[id].stunT=0; s.runners[id].shakeT=0; s.runners[id].immuneT=120; s.runners[id].taxMul=ONE
     case .tailwind: s.runners[id].speedT=151; s.runners[id].speedMul=81920
     case .firstClass: s.runners[id].speedT=73; s.runners[id].speedMul=91750; s.runners[id].vx=qmul(Tune.vBase,91750)
     }
@@ -186,10 +187,22 @@ func botHand(_ s: inout RaceState, _ id: Int, _ c: CourseData) -> Int? {
 public func step(_ s: inout RaceState, inputs: [InputFrame], course c: CourseData) {
     guard !s.complete else { return }
     let places=s.places
-    if s.taxT > 0 { s.taxT -= 1 }
+    // Bill is a continuous global status, with one hit/guard decision per
+    // runner per Bill. A shield absorbs that Bill, including later lead changes.
     for id in 0..<6 {
-        s.runners[id].taxMul = s.taxT > 0 && places.first == id && id != s.taxSender && s.runners[id].immuneT == 0 ? 58982 : ONE
+        s.runners[id].taxMul=ONE
+        let mask: UInt8=1 << id
+        guard s.taxT > 0 && places.first == id && id != s.taxSender && s.taxBlocked & mask == 0 && s.runners[id].alive && s.runners[id].invuln == 0 && s.runners[id].immuneT == 0 else { continue }
+        if s.taxAffected & mask == 0 {
+            if s.runners[id].guardT > 0 {
+                s.runners[id].guardT=0; s.taxBlocked |= mask; emit(&s,id,9); continue
+            }
+            if s.runners[id].shakeT > 0 { continue }
+            s.taxAffected |= mask; s.runners[id].shakeT=45
+        }
+        s.runners[id].taxMul=58982
     }
+    if s.taxT > 0 { s.taxT -= 1 }
     for n in 0..<6 {
         let id=(n+s.tick)%6
         chooseRoutes(&s,id,c)

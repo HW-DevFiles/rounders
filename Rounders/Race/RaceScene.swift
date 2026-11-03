@@ -26,6 +26,8 @@ struct TouchGeometry {
     private var parcels: [SKSpriteNode]=[]
     private var hazards: [SKSpriteNode]=[]
     private var effects=SKNode()
+    private var trapNodes: [SKSpriteNode]=[]
+    private var dartNodes: [SKSpriteNode]=[]
     private var backdrops: [(SKNode,CGFloat)]=[]
     private var zones: [ObjectIdentifier: UInt8]=[:]
     private let sounds=SoundBank()
@@ -56,11 +58,17 @@ struct TouchGeometry {
             backdrops.append((root,CGFloat(layer+1)*0.12))
         }
         effects.zPosition=6
+        for _ in 0..<54 { let node=SKSpriteNode(); node.isHidden=true; effects.addChild(node); trapNodes.append(node) }
+        for _ in 0..<32 { let node=SKSpriteNode(texture:Art.dart,size:CGSize(width:25,height:12)); node.isHidden=true; effects.addChild(node); dartNodes.append(node) }
     }
     required init?(coder: NSCoder) { fatalError("Use init(model:)") }
     override func didMove(to view: SKView) {
         view.isMultipleTouchEnabled=true; model.multiTouch=view.isMultipleTouchEnabled
         view.preferredFramesPerSecond=60
+    }
+    var nodeCount: Int {
+        func count(_ node: SKNode) -> Int { 1+node.children.reduce(0) { $0+count($1) } }
+        return count(self)
     }
     func resetClock() { clock.reset(); zones.removeAll(); model.touch(0) }
     func start(seed: UInt64,regular: Bool,autoplay: Bool) {
@@ -96,7 +104,14 @@ struct TouchGeometry {
         if frameCounter%6 == 0 || s.complete { model.snapshot=s }
         if s.complete && model.screen == .race {
             model.snapshot=s
-            if model.autoplay { print("ROUNDERS_RESULT seed=\(s.config.seed) tick=\(s.tick) hash=\(String(stateHash(s),radix:16)) finishers=\(s.runners.filter { $0.finished >= 0 }.count) \(s.places.map { "\(castNames[$0]):\(s.runners[$0].finished)" })") }
+            if model.autoplay {
+                let line="ROUNDERS_RESULT seed=\(s.config.seed) tick=\(s.tick) hash=\(String(stateHash(s),radix:16)) finishers=\(s.runners.filter { $0.finished >= 0 }.count) \(s.places.map { "\(castNames[$0]):\(s.runners[$0].finished)" })"
+                NSLog("%@",line)
+                // A simulator-console bridge may detach; retain the latest
+                // diagnostic result inside this app's temporary directory too.
+                let log=FileManager.default.temporaryDirectory.appendingPathComponent("rounders-autoplay.log")
+                try? (line+"\n").write(to:log,atomically:true,encoding:.utf8)
+            }
             model.firstRace=false; model.transition(.results)
         }
         render(s,alpha:clock.alpha)
@@ -107,10 +122,13 @@ struct TouchGeometry {
         let widthTiles=size.width*cam.xScale/tile
         let targetX=(CGFloat(r.x)/65536+15-widthTiles/2)*tile
         let feet=CGFloat(r.y)/65536*tile
-        let targetY=max(5.5*tile,feet+1.65*tile)
+        let targetY=feet+1.65*tile
         if !cameraReady { cam.position=CGPoint(x:targetX,y:targetY); cameraReady=true }
         cam.position.x=targetX
         cam.position.y += (targetY-cam.position.y)*0.15
+        // Smooth within the 30%...55% feet band, including low routes,
+        // springs, fast Plonks and a respawn onto a different route.
+        cam.position.y=min(feet+2.2*tile,max(feet-0.55*tile,cam.position.y))
         for (root,depth) in backdrops { root.position.x=cam.position.x*(1-depth)-600; root.position.y=cam.position.y*0.3-130 }
         for id in 0..<6 {
             let current=s.runners[id], old=previous?.runners[id] ?? current
@@ -121,14 +139,22 @@ struct TouchGeometry {
         }
         for i in parcels.indices { parcels[i].isHidden=s.inventories[0].parcels & (UInt64(1)<<i) != 0 }
         for (i,h) in c.hazards.enumerated() { hazards[i].alpha=(s.tick+s.config.clockOffset+h.phase)%h.period < h.on ? 1 : 0.12 }
-        effects.removeAllChildren()
-        for t in s.traps {
-            let n=SKSpriteNode(texture:t.kind == 2 ? Art.pins : Art.gum,size:CGSize(width:CGFloat(t.x1-t.x0)/65536*32,height:t.kind == 2 ? 14 : 8))
-            n.position=CGPoint(x:CGFloat(t.x0+t.x1)/65536*16,y:CGFloat(t.y)/65536*32+4); effects.addChild(n)
+        for (index,node) in trapNodes.enumerated() {
+            node.isHidden=index >= s.traps.count
+            if index < s.traps.count {
+                let t=s.traps[index]
+                node.texture=t.kind == 2 ? Art.pins : Art.gum
+                node.size=CGSize(width:CGFloat(t.x1-t.x0)/65536*32,height:t.kind == 2 ? 14 : 8)
+                node.position=CGPoint(x:CGFloat(t.x0+t.x1)/65536*16,y:CGFloat(t.y)/65536*32+4)
+            }
         }
-        for p in s.projectiles {
-            let n=SKSpriteNode(texture:Art.dart,size:CGSize(width:25,height:12)); n.position=CGPoint(x:CGFloat(p.x)/65536*32,y:CGFloat(p.y)/65536*32); effects.addChild(n)
+        for (index,node) in dartNodes.enumerated() {
+            node.isHidden=index >= s.projectiles.count
+            if index < s.projectiles.count {
+                let p=s.projectiles[index]; node.position=CGPoint(x:CGFloat(p.x)/65536*32,y:CGFloat(p.y)/65536*32)
+            }
         }
+        for (lane,id) in s.runners.indices.sorted(by:{ s.runners[$0].x < s.runners[$1].x }).enumerated() { runnerNodes[id].labelLane(lane%3) }
         let x=r.x >> 16
         if countdownLeft > 0 { model.prompt="Hold right to Hop · Hold left to Tuck" }
         else if !r.alive { model.prompt="BONK! Back at your last Anchor…" }

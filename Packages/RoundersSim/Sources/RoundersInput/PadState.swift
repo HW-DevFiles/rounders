@@ -16,3 +16,14 @@ public func mapPad(_ p: PadState) -> InputFrame {
     if p.menu || p.y { b |= 16 }
     return InputFrame(bits: b)
 }
+
+/// Raw menu controls stay separate from Down/Plonk gameplay input.
+public func mapMenu(_ p: PadState) -> UInt8 {
+    var bits: UInt8=0
+    if p.dpadUp || p.stickY > 0.5 { bits |= 1 }
+    if p.dpadDown || p.stickY < -0.5 { bits |= 2 }
+    if p.a { bits |= 4 }
+    if p.b { bits |= 8 }
+    if p.y || p.menu { bits |= 16 }
+    return bits
+}

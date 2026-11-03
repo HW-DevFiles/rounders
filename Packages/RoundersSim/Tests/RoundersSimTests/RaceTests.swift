@@ -61,9 +61,9 @@ final class RaceTests: XCTestCase {
             XCTAssertEqual(stateHash(b),expected)
         }
         XCTAssertEqual(stateHash(a),stateHash(b)); XCTAssertEqual(a.runners.filter { $0.finished >= 0 }.count,6)
-        XCTAssertEqual(stateHash(a),0xdc0c96a26c1682ae)
+        XCTAssertEqual(stateHash(a),0xf4b113528c0675d4)
     }
-    func testEveryAuthoritativeFieldAffectsHash() throws {
+    func testReplayHashCoversRNGPlansParcelsAndEvents() throws {
         let c=try CourseLoader.laundryLane(), s=makeRace(.demo(),course:c)
         var b=s; b.inventories[0].rng.state &+= 1; XCTAssertNotEqual(stateHash(s),stateHash(b))
         b=s; b.bots[1]!.planT += 1; XCTAssertNotEqual(stateHash(s),stateHash(b))

@@ -1,6 +1,17 @@
 import XCTest
 
 final class TouchZoneTests: XCTestCase {
+    @MainActor func testAutoplayReachesResultsWithSixFinishers() {
+        let app=XCUIApplication(); app.launchArguments=["-autoplay","-seed","42"]; app.launch()
+        XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:10))
+        XCTAssertTrue(app.staticTexts["results.title"].waitForExistence(timeout:150))
+        for name in ["Clem","Bap","Tuppence","Humbug","Bobbin","Pumice"] {
+            XCTAssertTrue(app.staticTexts.containing(NSPredicate(format:"label CONTAINS %@",name+" · ")).firstMatch.exists)
+        }
+        XCTAssertFalse(app.staticTexts["DNF"].exists)
+        app.buttons["menu.again"].tap()
+        XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
+    }
     @MainActor func testPointerZonesAfterScrollingAndLandscapeReversal() {
         let app=XCUIApplication(); app.launchArguments=["-uiTest","-inputDebug","-seed","42"]; app.launch()
         let label=app.staticTexts["debug.input"]
@@ -9,18 +20,28 @@ final class TouchZoneTests: XCTestCase {
         func pressZones() {
             let frame=app.windows.firstMatch.frame
             XCTAssertGreaterThan(frame.width,frame.height)
-            func press(_ x: CGFloat,_ y: CGFloat) { app.coordinate(withNormalizedOffset:CGVector(dx:x/frame.width,dy:y/frame.height)).press(forDuration:0.15) }
-            press(frame.width*0.85,frame.height*0.45); XCTAssertTrue(label.label.contains("seen:hop"))
-            press(frame.width*0.15,frame.height*0.45); XCTAssertTrue(label.label.contains("down"))
+            func press(_ x: CGFloat,_ y: CGFloat,index: Int) {
+                func count() -> Int {
+                    let counts=(label.label.components(separatedBy:"zoneCounts:").last ?? "").split(separator:",").compactMap { Int($0) }
+                    return index < counts.count ? counts[index] : -1
+                }
+                let before=count()
+                app.coordinate(withNormalizedOffset:CGVector(dx:x/frame.width,dy:y/frame.height)).press(forDuration:0.15)
+                XCTAssertEqual(count(),before+1,"zone \(index) after camera/orientation change")
+            }
+            press(frame.width*0.85,frame.height*0.45,index:0); XCTAssertTrue(label.label.contains("seen:hop"))
+            press(frame.width*0.15,frame.height*0.45,index:1); XCTAssertTrue(label.label.contains("down"))
             // Both landscape safe areas place the controls within 60...90 pt of the bottom.
-            press(200,frame.height-78); XCTAssertTrue(label.label.contains("handL"))
-            press(frame.width-200,frame.height-78); XCTAssertTrue(label.label.contains("handR"))
+            press(200,frame.height-78,index:2); XCTAssertTrue(label.label.contains("handL"))
+            press(frame.width-200,frame.height-78,index:3); XCTAssertTrue(label.label.contains("handR"))
         }
         pressZones()
+        let nodes=label.label.components(separatedBy:"nodes:").last?.split(separator:" ").first.flatMap { Int($0) } ?? 1000
+        XCTAssertLessThan(nodes,300)
         // Move beyond both the first ledge and the initial camera height.
         let tickAdvanced=NSPredicate { _,_ in
             let text=label.label.components(separatedBy:"tick:").last ?? "0"
-            return (Int(text) ?? 0) >= 500
+            return (Int(text.split(separator:" ").first ?? "0") ?? 0) >= 500
         }
         expectation(for:tickAdvanced,evaluatedWith:label)
         waitForExpectations(timeout:25)

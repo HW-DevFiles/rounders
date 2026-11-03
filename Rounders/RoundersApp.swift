@@ -27,9 +27,11 @@ enum Screen { case title, race, pause, results }
     @ObservationIgnored var latch=InputLatch()
     @ObservationIgnored var touchBits: UInt8=0
     @ObservationIgnored var capturedTouch: UInt8=0
+    @ObservationIgnored var zoneCounts=[0,0,0,0]
     @ObservationIgnored var seen: UInt8=0
     @ObservationIgnored var padSeen: UInt8=0
     @ObservationIgnored var raw: UInt8=0
+    @ObservationIgnored var menuNeedsRelease=false
     @ObservationIgnored var menuPrevious: UInt8=0
     @ObservationIgnored var nextMove=0.0
     @ObservationIgnored lazy var scene=RaceScene(model:self)
@@ -44,14 +46,16 @@ enum Screen { case title, race, pause, results }
         controllers.onDisconnect={ [weak self] in if self?.screen == .race { self?.pause() } }
     }
     func transition(_ to: Screen) {
-        screen=to; focus=0; latch.reset(suppressing:raw); capturedTouch=0; scene.resetClock(); menuPrevious=255
+        screen=to; focus=0; latch.reset(suppressing:raw); capturedTouch=0; scene.resetClock(); menuPrevious=255; menuNeedsRelease=true
     }
     func start() { scene.start(seed:seed,regular:regular,autoplay:autoplay); transition(.race) }
     func pause() { if screen == .race { transition(.pause) } }
     func resume() { transition(.race) }
     func background(_ running: Bool) { active=running; if !running { pause() }; latch.reset(suppressing:raw); scene.resetClock() }
     func touch(_ bits: UInt8) {
-        capturedTouch |= bits & ~touchBits; touchBits=bits
+        let edges=bits & ~touchBits
+        for index in 0..<4 where edges & (1 << index) != 0 { zoneCounts[index] += 1 }
+        capturedTouch |= edges; touchBits=bits
         if bits != 0 { lastDevice="Mouse / touch"; seen |= bits }
     }
     func confirm(_ index: Int? = nil) {
@@ -66,17 +70,17 @@ enum Screen { case title, race, pause, results }
     func poll(_ now: Double) {
         let p=controllers.poll(), k=keyboard()
         raw=touchBits | p.bits | k.bits
-        if p.bits != 0 || p.edges != 0 { lastDevice="Controller"; padSeen |= p.bits | p.edges }
-        else if k.bits != 0 { lastDevice="Keyboard" }
+        if p.bits != 0 || p.edges != 0 || p.menu != 0 || p.menuEdges != 0 { lastDevice="Controller"; padSeen |= p.bits | p.edges }
+        else if k.bits != 0 || k.menu != 0 { lastDevice="Keyboard" }
         seen |= raw | p.edges | capturedTouch
         latch.sample(raw,capturedEdges:p.edges | capturedTouch); capturedTouch=0
-        var menu: UInt8=0
-        if p.up || k.up { menu |= 1 }; if p.down || k.down { menu |= 2 }
-        if (p.bits | k.bits) & 1 != 0 { menu |= 4 }
-        if p.back || k.back { menu |= 8 }
-        if raw & 16 != 0 { menu |= 16 }
-        let edges=menu & ~menuPrevious
-        if active {
+        let menu=p.menu | k.menu
+        var edges=(menu & ~menuPrevious) | p.menuEdges
+        if menuNeedsRelease {
+            edges=0
+            if menu == 0 && p.menuEdges == 0 { menuNeedsRelease=false }
+        }
+        if active && !menuNeedsRelease {
             if screen == .race { if edges & 16 != 0 { pause() } }
             else {
                 let count=screen == .pause ? 3 : 2
@@ -89,7 +93,7 @@ enum Screen { case title, race, pause, results }
         }
         menuPrevious=menu
         if args.contains("-inputDebug") || args.contains("-uiTest") {
-            debug="input:\(InputFrame(bits:raw).names) seen:\(InputFrame(bits:seen).names) padSeen:\(padSeen) pads:\(controllers.count) mt:\(multiTouch) virtual:\(virtualOK ? "ok" : "no") tick:\(snapshot?.tick ?? 0)"
+            debug="input:\(InputFrame(bits:raw).names) seen:\(InputFrame(bits:seen).names) padSeen:\(padSeen) menu:\(menu) pads:\(controllers.count) mt:\(multiTouch) virtual:\(virtualOK ? "ok" : "no") tick:\(snapshot?.tick ?? 0) nodes:\(scene.nodeCount) zoneCounts:\(zoneCounts.map(String.init).joined(separator:","))"
         }
     }
 }

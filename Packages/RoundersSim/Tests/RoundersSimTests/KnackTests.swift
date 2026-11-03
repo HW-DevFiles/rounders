@@ -31,6 +31,21 @@ final class KnackTests: XCTestCase {
         s.runners[0].x=50*ONE; step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[0].taxMul,ONE); XCTAssertEqual(s.runners[5].taxMul,ONE)
         s.taxT=1; step(&s,inputs:[],course:c); XCTAssertEqual(s.taxT,0)
     }
+    func testBillGuardBlocksThisBillAcrossLeadChanges() {
+        let c=flat(); var s=arena(); give(&s,.overdueBill)
+        s.runners[5].guardT=180
+        useKnack(&s,runner:0,hand:0,course:c)
+        step(&s,inputs:[],course:c)
+        XCTAssertEqual(s.runners[5].guardT,0); XCTAssertEqual(s.runners[5].taxMul,ONE)
+        s.runners[4].x=50*ONE; step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[4].taxMul,58982)
+        s.runners[5].x=60*ONE; step(&s,inputs:[],course:c); XCTAssertEqual(s.runners[5].taxMul,ONE)
+        // Another Bill resets eligibility; Seal clears Tax on the same use tick.
+        s.inventories[0].lockout=0; give(&s,.overdueBill)
+        useKnack(&s,runner:0,hand:0,course:c); step(&s,inputs:[],course:c)
+        XCTAssertEqual(s.runners[5].taxMul,58982)
+        give(&s,.tamperSeal,to:5); step(&s,inputs:[InputFrame(),InputFrame(),InputFrame(),InputFrame(),InputFrame(),InputFrame(bits:4)],course:c)
+        XCTAssertEqual(s.runners[5].taxMul,ONE)
+    }
     func testDrawingPinsAndOwnerImmunity() {
         let c=flat(); var s=arena(); give(&s,.drawingPins)
         useKnack(&s,runner:0,hand:0,course:c)

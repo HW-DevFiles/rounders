@@ -38,7 +38,7 @@ import RoundersSim
             c.setFillColor(colors[id].cgColor); c.fillEllipse(in:CGRect(x:5,y:5,width:52,height:52))
             c.setStrokeColor(Ink.navy.cgColor); c.setLineWidth(2.5); c.strokeEllipse(in:CGRect(x:5,y:5,width:52,height:52))
             c.saveGState(); c.addEllipse(in:CGRect(x:7,y:7,width:48,height:48)); c.clip()
-            if id == 3 { c.setStrokeColor(Ink.danger.cgColor); c.setLineWidth(7); for x in stride(from:-60,to:100,by:20) { c.move(to:CGPoint(x:x,y:0)); c.addLine(to:CGPoint(x:x+64,y:64)); c.strokePath() } }
+            if id == 3 { c.setStrokeColor(Ink.navy.cgColor); c.setLineWidth(7); for x in stride(from:-60,to:100,by:20) { c.move(to:CGPoint(x:x,y:0)); c.addLine(to:CGPoint(x:x+64,y:64)); c.strokePath() } }
             if id == 1 { c.setStrokeColor(Ink.paper.cgColor); c.setLineWidth(3); for x in [14,24,34] { c.move(to:CGPoint(x:x,y:14)); c.addLine(to:CGPoint(x:x+8,y:20)); c.strokePath() } }
             if id == 2 || id == 4 { c.setStrokeColor(Ink.navy.withAlphaComponent(0.5).cgColor); c.strokeEllipse(in:CGRect(x:11,y:11,width:40,height:40)) }
             if id == 5 { c.setFillColor(Ink.paper.cgColor); for x in [12,25,40] { c.fillEllipse(in:CGRect(x:x,y:x/2,width:3,height:3)) } }
@@ -88,27 +88,32 @@ import RoundersSim
 }
 @MainActor final class RunnerView: SKNode {
     private let body: SKSpriteNode
+    private let pose=SKNode()
+    private let castId: Int
     private let nameLabel=SKLabelNode(fontNamed:"AvenirNext-Bold")
     private let guardRing: SKSpriteNode
     private var pips: [SKSpriteNode]=[]
     private let shadow=SKSpriteNode(color:Ink.navy.withAlphaComponent(0.15),size:CGSize(width:32,height:4))
     init(cast: Int) {
+        castId=cast
         body=SKSpriteNode(texture:Art.runner(cast),size:CGSize(width:42,height:46)); body.anchorPoint=CGPoint(x:0.5,y:0)
         guardRing=SKSpriteNode(texture:Art.texture { c in c.setStrokeColor(Ink.teal.cgColor); c.setLineWidth(4); c.strokeEllipse(in:CGRect(x:2,y:2,width:60,height:60)) },size:CGSize(width:56,height:60))
         super.init(); zPosition=cast == 0 ? 10 : 8
-        addChild(shadow); addChild(body); guardRing.position.y=24; addChild(guardRing)
+        addChild(shadow); addChild(pose); pose.addChild(body); guardRing.position.y=24; addChild(guardRing)
         nameLabel.text=cast == 0 ? "▼ YOU" : castNames[cast]; nameLabel.fontSize=10; nameLabel.fontColor=Ink.navy; nameLabel.position.y=62; addChild(nameLabel)
         for i in 0..<2 { let p=SKSpriteNode(color:Ink.paper,size:CGSize(width:6,height:6)); p.position=CGPoint(x:i*9-4,y:54); addChild(p); pips.append(p) }
     }
     required init?(coder: NSCoder) { fatalError("Use init(cast:)") }
     func sync(_ r: Runner,position: CGPoint,hands: [Int],tier: Int?) {
         self.position=position; alpha = !r.alive ? 0.25 : r.invuln > 0 && (r.invuln/5)%2 == 0 ? 0.5 : 1
-        body.yScale=r.tucked ? 0.5 : 1; body.xScale=r.tucked ? 1.10 : 1
+        pose.yScale=r.tucked ? 0.5 : 1; pose.xScale=r.tucked ? 1.10 : 1
         guardRing.isHidden=r.guardT == 0 && r.immuneT == 0
         body.color=r.statusT > 0 ? .systemPurple : .white; body.colorBlendFactor=r.statusT > 0 ? 0.3 : 0
-        nameLabel.fontColor=tier == nil ? Ink.teal : Ink.navy
+        nameLabel.fontColor=castId == 0 ? Ink.teal : Ink.navy
+        nameLabel.text=castId == 0 ? "▼ YOU" : "\(castNames[castId]) · \(tier.map { ["E","R","X","S","P"][$0] } ?? "")"
         for h in 0..<2 { pips[h].color=hands[h] >= 0 ? Ink.categories[hands[h] >> 1] : Ink.paper; pips[h].alpha=hands[h] >= 0 ? 1 : 0.3 }
     }
+    func labelLane(_ lane: Int) { nameLabel.position.y=62+CGFloat(lane)*16 }
     func hop() { body.run(.sequence([.scaleX(to:0.85,y:1.12,duration:0.08),.scale(to:1,duration:0.1)]),withKey:"squash") }
     func land(roll: Bool) { body.run(.sequence([.scaleX(to:roll ? 1.25 : 1.12,y:0.75,duration:0.05),.scale(to:1,duration:0.14)]),withKey:"squash") }
     func bonk() { body.run(.rotate(byAngle:.pi*2,duration:0.4)) }

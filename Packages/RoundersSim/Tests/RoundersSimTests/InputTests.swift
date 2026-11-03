@@ -17,6 +17,25 @@ final class InputTests: XCTestCase {
         p.menu=true; XCTAssertEqual(mapPad(p).bits,16); p.menu=false
         p.x=true; p.dpadUp=true; XCTAssertEqual(mapPad(p).bits,0)
     }
+    func testMenuControlsStaySeparateFromGameplay() {
+        var p=PadState(); p.dpadUp=true
+        XCTAssertEqual(mapMenu(p),1); XCTAssertEqual(mapPad(p).bits,0)
+        p.dpadUp=false; p.dpadDown=true; XCTAssertEqual(mapMenu(p),2)
+        p.dpadDown=false; p.a=true; XCTAssertEqual(mapMenu(p),4)
+        p.a=false; p.b=true; XCTAssertEqual(mapMenu(p),8)
+        p.b=false; p.y=true; XCTAssertEqual(mapMenu(p),16)
+        p.y=false; p.menu=true; XCTAssertEqual(mapMenu(p),16)
+    }
+    func testKeyboardMenuArrowsNeverConfirm() {
+        var k=KeyboardState(); k.up=true
+        XCTAssertEqual(mapKeyboard(k).bits,1); XCTAssertEqual(mapKeyboard(k).menu,1)
+        k.up=false; k.w=true; XCTAssertEqual(mapKeyboard(k).menu,1)
+        k.w=false; k.down=true; XCTAssertEqual(mapKeyboard(k).bits,2); XCTAssertEqual(mapKeyboard(k).menu,2)
+        k.down=false; k.space=true; XCTAssertEqual(mapKeyboard(k).bits,1); XCTAssertEqual(mapKeyboard(k).menu,4)
+        k.space=false; k.enter=true; XCTAssertEqual(mapKeyboard(k).bits,0); XCTAssertEqual(mapKeyboard(k).menu,4)
+        k.enter=false; k.escape=true; XCTAssertEqual(mapKeyboard(k).bits,16); XCTAssertEqual(mapKeyboard(k).menu,24)
+        k.escape=false; k.q=true; k.e=true; XCTAssertEqual(mapKeyboard(k).bits,12); XCTAssertEqual(mapKeyboard(k).menu,0)
+    }
     func testShortTapPersistsAcrossZeroTickFramesAndNotCatchup() {
         var latch=InputLatch(), clock=TickClock()
         XCTAssertEqual(clock.advance(0,running:true),0)

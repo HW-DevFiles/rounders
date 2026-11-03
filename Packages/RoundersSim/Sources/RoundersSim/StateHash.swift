@@ -13,7 +13,7 @@ public func stateHash(_ s: RaceState) -> UInt64 {
     func plan(_ p: Plan) { switch p { case .none: int(0); case .hop(let a): int(1); int(a); case .tuck(let a): int(2); int(a); case .hopPlonk(let a,let b): int(3); int(a); int(b) } }
     int(1); word(s.config.seed); int(s.config.clockOffset)
     int(s.config.runners.count); for r in s.config.runners { int(r.botTier ?? -1); int(r.cast) }
-    ints([s.tick,s.sequence,s.taxT,s.taxSender,s.trapGroup,s.playerFinishedAt]); bool(s.complete)
+    ints([s.tick,s.sequence,s.taxT,s.taxSender,s.trapGroup,s.playerFinishedAt]); bool(s.complete); int(Int(s.taxAffected)); int(Int(s.taxBlocked))
     int(s.runners.count)
     for r in s.runners {
         ints([r.guardT,r.immuneT,r.shakeT,r.stunT,r.x,r.y,r.vx,r.vy,r.coyote,r.hopBuf,r.fallTop,r.tuckTicks,r.roll,r.thud,r.bonkTimer,r.invuln,r.anchorX,r.anchorY,r.statusMul,r.statusT,r.speedMul,r.speedT,r.finished,r.bonks,r.bumps,r.rolls,r.stuckT,r.stuckX,r.noHopT,r.taxMul,r.streakAnchor,r.streak,r.mercies])

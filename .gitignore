@@ -62,6 +62,5 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 
 Config/Signing.local.xcconfig
-.build/
 build/
 build-device/

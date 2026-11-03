@@ -7,6 +7,8 @@ import RoundersInput
     private var known: [ObjectIdentifier: GCController] = [:]
     private var callbackBits: [ObjectIdentifier: UInt8] = [:]
     private var pending: UInt8 = 0
+    private var pendingMenu: UInt8 = 0
+    private var callbackMenu: [ObjectIdentifier: UInt8] = [:]
     private var observers: [NSObjectProtocol] = []
     private(set) var lastUsed: ObjectIdentifier?
     var onDisconnect: (() -> Void)?
@@ -37,7 +39,11 @@ import RoundersInput
                 let snapshot=Self.read(pad)
                 Task { @MainActor [weak self] in
                     guard let self else { return }
+                    guard self.known[id] != nil else { return }
                     let bits=mapPad(snapshot).bits
+                    let menu=mapMenu(snapshot)
+                    self.pendingMenu |= menu & ~(self.callbackMenu[id] ?? 0)
+                    self.callbackMenu[id]=menu
                     self.pending |= bits & ~(self.callbackBits[id] ?? 0)
                     self.callbackBits[id]=bits
                     if bits != 0 { self.lastUsed=id }
@@ -48,20 +54,21 @@ import RoundersInput
     /// Test seam: simulator's permanent virtual pad cannot exercise real disconnects.
     func disconnected(_ id: ObjectIdentifier) {
         known[id]?.extendedGamepad?.valueChangedHandler=nil
-        known[id]=nil; callbackBits[id]=nil
-        if lastUsed == id { lastUsed=nil; pending=0; onDisconnect?() }
+        known[id]=nil; callbackBits[id]=nil; callbackMenu[id]=nil
+        if lastUsed == id { lastUsed=nil; pending=0; pendingMenu=0; onDisconnect?() }
     }
-    func poll() -> (bits: UInt8, edges: UInt8, up: Bool, down: Bool, back: Bool) {
+    func poll() -> (bits: UInt8, edges: UInt8, menu: UInt8, menuEdges: UInt8) {
         rescan()
-        var bits: UInt8=0, up=false, down=false, back=false
+        var bits: UInt8=0, menu: UInt8=0
         for g in GCController.controllers() {
             guard let p=g.extendedGamepad else { continue }
-            let s=Self.read(p), b=mapPad(s).bits
-            bits |= b; up = up || s.dpadUp || s.stickY > 0.5; down = down || s.dpadDown || s.stickY < -0.5; back = back || s.b
-            if b != 0 || up || down { lastUsed=ObjectIdentifier(g) }
+            let s=Self.read(p), b=mapPad(s).bits, m=mapMenu(s)
+            bits |= b; menu |= m
+            if b != 0 || m != 0 { lastUsed=ObjectIdentifier(g) }
         }
-        let edges=pending; pending=0
-        return (bits,edges,up,down,back)
+        let edges=pending, menuEdges=pendingMenu
+        pending=0; pendingMenu=0
+        return (bits,edges,menu,menuEdges)
     }
     func selfTest() -> Bool {
         let v=GCController.withExtendedGamepad()
@@ -87,13 +94,12 @@ import RoundersInput
     }
 }
 
-@MainActor func keyboard() -> (bits: UInt8, up: Bool, down: Bool, back: Bool) {
-    guard let k=GCKeyboard.coalesced?.keyboardInput else { return (0,false,false,false) }
+@MainActor func keyboard() -> (bits: UInt8, menu: UInt8) {
+    guard let k=GCKeyboard.coalesced?.keyboardInput else { return (0,0) }
     func on(_ c: GCKeyCode) -> Bool { k.button(forKeyCode:c)?.isPressed ?? false }
-    var b: UInt8=0
-    if on(.spacebar) || on(.keyW) || on(.upArrow) { b |= 1 }
-    if on(.keyS) || on(.downArrow) { b |= 2 }
-    if on(.keyQ) { b |= 4 }; if on(.keyE) { b |= 8 }
-    if on(.escape) || on(.keyP) { b |= 16 }
-    return (b,on(.upArrow) || on(.keyW),on(.downArrow) || on(.keyS),on(.escape))
+    var keys=KeyboardState()
+    keys.space=on(.spacebar); keys.w=on(.keyW); keys.up=on(.upArrow)
+    keys.s=on(.keyS); keys.down=on(.downArrow); keys.q=on(.keyQ); keys.e=on(.keyE)
+    keys.escape=on(.escape); keys.p=on(.keyP); keys.enter=on(.returnOrEnter)
+    return mapKeyboard(keys)
 }
