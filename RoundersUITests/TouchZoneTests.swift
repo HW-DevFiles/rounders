@@ -9,6 +9,7 @@ final class TouchZoneTests: XCTestCase {
             XCTAssertTrue(app.staticTexts.containing(NSPredicate(format:"label CONTAINS %@",name+" · ")).firstMatch.exists)
         }
         XCTAssertFalse(app.staticTexts["DNF"].exists)
+        XCTAssertEqual(app.staticTexts["results.seed"].label,"Seed 42")
         app.buttons["menu.again"].tap()
         XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
     }
@@ -52,11 +53,28 @@ final class TouchZoneTests: XCTestCase {
         app.buttons["menu.resume"].tap(); XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
         app.buttons["race.pause"].tap(); app.buttons["menu.restart"].tap()
         XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
+        XCTAssertTrue(label.label.contains("seed:42 "))
         app.buttons["race.pause"].tap(); app.buttons["menu.title"].tap()
         XCTAssertTrue(app.buttons["menu.race"].waitForExistence(timeout:3))
     }
-    @MainActor func testControllerSnapshotReadPathAndDisconnectSeam() {
+    @MainActor func testRacesWithoutSeedArgumentDrawFreshSeeds() {
         let app=XCUIApplication(); app.launchArguments=["-inputDebug"]; app.launch()
+        let label=app.staticTexts["debug.input"]; XCTAssertTrue(label.waitForExistence(timeout:10))
+        func seed() -> String { label.label.components(separatedBy:"seed:").last?.split(separator:" ").first.map(String.init) ?? "-" }
+        func waitForNewSeed(after old: String) -> String {
+            expectation(for:NSPredicate { _,_ in seed() != old },evaluatedWith:label)
+            waitForExpectations(timeout:5)
+            return seed()
+        }
+        app.buttons["menu.race"].tap()
+        XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
+        let first=waitForNewSeed(after:"-")
+        app.buttons["race.pause"].tap(); app.buttons["menu.restart"].tap()
+        XCTAssertTrue(app.buttons["race.pause"].waitForExistence(timeout:3))
+        XCTAssertNotEqual(waitForNewSeed(after:first),first)
+    }
+    @MainActor func testControllerSnapshotReadPathAndDisconnectSeam() {
+        let app=XCUIApplication(); app.launchArguments=["-inputDebug","-seed","42"]; app.launch()
         let label=app.staticTexts["debug.input"]; XCTAssertTrue(label.waitForExistence(timeout:10))
         // selfTest drives every supported button/trigger/stick through GCController,
         // ControllerHub.read and mapPad, plus the last-used disconnect seam.

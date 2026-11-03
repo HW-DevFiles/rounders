@@ -22,7 +22,7 @@ For a deterministic spectator run or input diagnostics:
 ./scripts/run-sim.sh -autoplay -seed 42 -inputDebug
 ```
 
-`-autoplay` makes Clem a Regular bot, reaches Results and logs `ROUNDERS_RESULT` with the seed, six runner results and a state hash. `-seed N` fixes the starting grid and random streams. `-inputDebug` shows live/seen input, actual touch-zone counters, controller count and simulation tick. The simulator’s permanent virtual controller may appear even with no physical pad attached; controller count is not proof of a connected PS5 controller.
+`-autoplay` makes Clem a Regular bot, reaches Results and logs `ROUNDERS_RESULT` with the seed, six runner results and a state hash. Without `-seed`, every race draws a fresh seed and Results shows it; `-seed N` replays that seed’s starting grid and random streams. `-inputDebug` shows live/seen input, actual touch-zone counters, controller count and simulation tick. The simulator’s permanent virtual controller may appear even with no physical pad attached; controller count is not proof of a connected PS5 controller.
 
 ## Controls
 

@@ -38,8 +38,9 @@ enum Screen { case title, race, pause, results }
     let args=ProcessInfo.processInfo.arguments
     var autoplay: Bool { args.contains("-autoplay") }
     var diagnostics: Bool { args.contains("-inputDebug") || args.contains("-uiTest") }
-    var seed: UInt64 {
-        if let i=args.firstIndex(of:"-seed"),i+1 < args.count { return UInt64(args[i+1]) ?? 42 }; return 42
+    func nextSeed() -> UInt64 {
+        if let i=args.firstIndex(of:"-seed"),i+1 < args.count,let fixed=UInt64(args[i+1]) { return fixed }
+        return UInt64.random(in:.min ... .max)
     }
     init() {
         do { course=try CourseLoader.laundryLane() } catch { fatalError("Course resource failed validation: \(error)") }
@@ -49,7 +50,7 @@ enum Screen { case title, race, pause, results }
     func transition(_ to: Screen) {
         screen=to; focus=0; latch.reset(suppressing:raw); capturedTouch=0; scene.resetClock(); menuPrevious=255; menuNeedsRelease=true
     }
-    func start() { scene.start(seed:seed,regular:regular,autoplay:autoplay); transition(.race) }
+    func start() { scene.start(seed:nextSeed(),regular:regular,autoplay:autoplay); transition(.race) }
     func pause() { if screen == .race { transition(.pause) } }
     func resume() { transition(.race) }
     func background(_ running: Bool) { active=running; if !running { pause() }; latch.reset(suppressing:raw); scene.resetClock() }
@@ -94,7 +95,7 @@ enum Screen { case title, race, pause, results }
         }
         menuPrevious=menu
         if diagnostics {
-            debug="input:\(InputFrame(bits:raw).names) seen:\(InputFrame(bits:seen).names) padSeen:\(padSeen) menu:\(menu) pads:\(controllers.count) mt:\(multiTouch) virtual:\(virtualOK ? "ok" : "no") tick:\(snapshot?.tick ?? 0) nodes:\(scene.nodeCount) zoneCounts:\(zoneCounts.map(String.init).joined(separator:","))"
+            debug="input:\(InputFrame(bits:raw).names) seen:\(InputFrame(bits:seen).names) padSeen:\(padSeen) menu:\(menu) pads:\(controllers.count) mt:\(multiTouch) virtual:\(virtualOK ? "ok" : "no") seed:\(snapshot.map { String($0.config.seed) } ?? "-") tick:\(snapshot?.tick ?? 0) nodes:\(scene.nodeCount) zoneCounts:\(zoneCounts.map(String.init).joined(separator:","))"
         }
     }
 }
@@ -152,6 +153,7 @@ struct RootView: View {
         VStack(spacing:5) {
             Text("ROUND COMPLETE").font(.system(size:18,weight:.black,design:.rounded)).accessibilityIdentifier("results.title")
             if let s=model.snapshot {
+                Text(verbatim:"Seed \(s.config.seed)").font(.system(size:10,design:.monospaced)).foregroundStyle(.secondary).accessibilityIdentifier("results.seed")
                 ForEach(Array(s.places.enumerated()),id:\.element) { place,id in
                     HStack {
                         Text("\(place+1). \(castNames[id])\(id == 0 ? " · YOU" : " · AI")").fontWeight(id == 0 ? .bold : .regular)
